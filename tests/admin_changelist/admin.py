@@ -1,10 +1,13 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
 from django.core.paginator import Paginator
 
-from .models import Event, Child, Parent, Swallow
-
+from .models import Child, Event, Parent, Swallow
 
 site = admin.AdminSite(name="admin")
+
+site.register(User, UserAdmin)
 
 
 class CustomPaginator(Paginator):
@@ -18,6 +21,9 @@ class EventAdmin(admin.ModelAdmin):
 
     def event_date_func(self, event):
         return event.date
+
+    def has_add_permission(self, request):
+        return False
 
 site.register(Event, EventAdmin)
 
@@ -33,7 +39,7 @@ class ChildAdmin(admin.ModelAdmin):
     list_filter = ['parent', 'age']
 
     def get_queryset(self, request):
-        return super(ChildAdmin, self).get_queryset(request).select_related("parent__name")
+        return super(ChildAdmin, self).get_queryset(request).select_related("parent")
 
 
 class CustomPaginationAdmin(ChildAdmin):
@@ -55,6 +61,11 @@ class BandAdmin(admin.ModelAdmin):
 
 class GroupAdmin(admin.ModelAdmin):
     list_filter = ['members']
+
+
+class ConcertAdmin(admin.ModelAdmin):
+    list_filter = ['group__members']
+    search_fields = ['group__members__name']
 
 
 class QuartetAdmin(admin.ModelAdmin):
@@ -99,7 +110,9 @@ site.register(Parent, NoListDisplayLinksParentAdmin)
 
 class SwallowAdmin(admin.ModelAdmin):
     actions = None  # prevent ['action_checkbox'] + list(list_display)
-    list_display = ('origin', 'load', 'speed')
+    list_display = ('origin', 'load', 'speed', 'swallowonetoone')
+    list_editable = ['load', 'speed']
+    list_per_page = 3
 
 site.register(Swallow, SwallowAdmin)
 
@@ -122,3 +135,12 @@ class DynamicSearchFieldsChildAdmin(admin.ModelAdmin):
         search_fields = super(DynamicSearchFieldsChildAdmin, self).get_search_fields(request)
         search_fields += ('age',)
         return search_fields
+
+
+class EmptyValueChildAdmin(admin.ModelAdmin):
+    empty_value_display = '-empty-'
+    list_display = ('name', 'age_display', 'age')
+
+    def age_display(self, obj):
+        return obj.age
+    age_display.empty_value_display = '&dagger;'

@@ -5,13 +5,17 @@ import datetime
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import models
-from django.forms import Form, ModelForm, FileField, ModelChoiceField, CharField
+from django.forms import (
+    CharField, FileField, Form, ModelChoiceField, ModelForm,
+)
 from django.forms.models import ModelFormMetaclass
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import six
 
-from ..models import (ChoiceModel, ChoiceOptionModel, ChoiceFieldModel,
-    FileModel, Group, BoundaryModel, Defaults, OptionalMultiChoiceModel)
+from ..models import (
+    BoundaryModel, ChoiceFieldModel, ChoiceModel, ChoiceOptionModel, Defaults,
+    FileModel, Group, OptionalMultiChoiceModel,
+)
 
 
 class ChoiceFieldForm(ModelForm):
@@ -56,16 +60,22 @@ class FileForm(Form):
     file1 = FileField()
 
 
-class TestTicket12510(TestCase):
-    ''' It is not necessary to generate choices for ModelChoiceField (regression test for #12510). '''
-    def setUp(self):
-        self.groups = [Group.objects.create(name=name) for name in 'abc']
+class TestModelChoiceField(TestCase):
 
     def test_choices_not_fetched_when_not_rendering(self):
+        """
+        Generating choices for ModelChoiceField should require 1 query (#12510).
+        """
+        self.groups = [Group.objects.create(name=name) for name in 'abc']
         # only one query is required to pull the model from DB
         with self.assertNumQueries(1):
             field = ModelChoiceField(Group.objects.order_by('-name'))
             self.assertEqual('a', field.clean(self.groups[0].pk).name)
+
+    def test_queryset_manager(self):
+        f = ModelChoiceField(ChoiceOptionModel.objects)
+        choice = ChoiceOptionModel.objects.create(name="choice 1")
+        self.assertEqual(list(f.choices), [('', '---------'), (choice.pk, str(choice))])
 
 
 class TestTicket14567(TestCase):
@@ -97,7 +107,9 @@ class ModelFormCallableModelDefault(TestCase):
         ChoiceOptionModel.objects.create(id=1, name='default')
         ChoiceOptionModel.objects.create(id=2, name='option 2')
         ChoiceOptionModel.objects.create(id=3, name='option 3')
-        self.assertHTMLEqual(ChoiceFieldForm().as_p(), """<p><label for="id_choice">Choice:</label> <select name="choice" id="id_choice">
+        self.assertHTMLEqual(
+            ChoiceFieldForm().as_p(),
+            """<p><label for="id_choice">Choice:</label> <select name="choice" id="id_choice">
 <option value="1" selected="selected">ChoiceOption 1</option>
 <option value="2">ChoiceOption 2</option>
 <option value="3">ChoiceOption 3</option>
@@ -107,28 +119,33 @@ class ModelFormCallableModelDefault(TestCase):
 <option value="2">ChoiceOption 2</option>
 <option value="3">ChoiceOption 3</option>
 </select><input type="hidden" name="initial-choice_int" value="1" id="initial-id_choice_int" /></p>
-<p><label for="id_multi_choice">Multi choice:</label> <select multiple="multiple" name="multi_choice" id="id_multi_choice">
+<p><label for="id_multi_choice">Multi choice:</label>
+<select multiple="multiple" name="multi_choice" id="id_multi_choice">
 <option value="1" selected="selected">ChoiceOption 1</option>
 <option value="2">ChoiceOption 2</option>
 <option value="3">ChoiceOption 3</option>
-</select><input type="hidden" name="initial-multi_choice" value="1" id="initial-id_multi_choice_0" /> <span class="helptext"> Hold down "Control", or "Command" on a Mac, to select more than one.</span></p>
-<p><label for="id_multi_choice_int">Multi choice int:</label> <select multiple="multiple" name="multi_choice_int" id="id_multi_choice_int">
+</select><input type="hidden" name="initial-multi_choice" value="1" id="initial-id_multi_choice_0" /></p>
+<p><label for="id_multi_choice_int">Multi choice int:</label>
+<select multiple="multiple" name="multi_choice_int" id="id_multi_choice_int">
 <option value="1" selected="selected">ChoiceOption 1</option>
 <option value="2">ChoiceOption 2</option>
 <option value="3">ChoiceOption 3</option>
-</select><input type="hidden" name="initial-multi_choice_int" value="1" id="initial-id_multi_choice_int_0" /> <span class="helptext"> Hold down "Control", or "Command" on a Mac, to select more than one.</span></p>""")
+</select><input type="hidden" name="initial-multi_choice_int" value="1" id="initial-id_multi_choice_int_0" /></p>"""
+        )
 
     def test_initial_instance_value(self):
         "Initial instances for model fields may also be instances (refs #7287)"
         ChoiceOptionModel.objects.create(id=1, name='default')
         obj2 = ChoiceOptionModel.objects.create(id=2, name='option 2')
         obj3 = ChoiceOptionModel.objects.create(id=3, name='option 3')
-        self.assertHTMLEqual(ChoiceFieldForm(initial={
-            'choice': obj2,
-            'choice_int': obj2,
-            'multi_choice': [obj2, obj3],
-            'multi_choice_int': ChoiceOptionModel.objects.exclude(name="default"),
-        }).as_p(), """<p><label for="id_choice">Choice:</label> <select name="choice" id="id_choice">
+        self.assertHTMLEqual(
+            ChoiceFieldForm(initial={
+                'choice': obj2,
+                'choice_int': obj2,
+                'multi_choice': [obj2, obj3],
+                'multi_choice_int': ChoiceOptionModel.objects.exclude(name="default"),
+            }).as_p(),
+            """<p><label for="id_choice">Choice:</label> <select name="choice" id="id_choice">
 <option value="1">ChoiceOption 1</option>
 <option value="2" selected="selected">ChoiceOption 2</option>
 <option value="3">ChoiceOption 3</option>
@@ -138,32 +155,36 @@ class ModelFormCallableModelDefault(TestCase):
 <option value="2" selected="selected">ChoiceOption 2</option>
 <option value="3">ChoiceOption 3</option>
 </select><input type="hidden" name="initial-choice_int" value="2" id="initial-id_choice_int" /></p>
-<p><label for="id_multi_choice">Multi choice:</label> <select multiple="multiple" name="multi_choice" id="id_multi_choice">
+<p><label for="id_multi_choice">Multi choice:</label>
+<select multiple="multiple" name="multi_choice" id="id_multi_choice">
 <option value="1">ChoiceOption 1</option>
 <option value="2" selected="selected">ChoiceOption 2</option>
 <option value="3" selected="selected">ChoiceOption 3</option>
 </select><input type="hidden" name="initial-multi_choice" value="2" id="initial-id_multi_choice_0" />
-<input type="hidden" name="initial-multi_choice" value="3" id="initial-id_multi_choice_1" /> <span class="helptext"> Hold down "Control", or "Command" on a Mac, to select more than one.</span></p>
-<p><label for="id_multi_choice_int">Multi choice int:</label> <select multiple="multiple" name="multi_choice_int" id="id_multi_choice_int">
+<input type="hidden" name="initial-multi_choice" value="3" id="initial-id_multi_choice_1" /></p>
+<p><label for="id_multi_choice_int">Multi choice int:</label>
+<select multiple="multiple" name="multi_choice_int" id="id_multi_choice_int">
 <option value="1">ChoiceOption 1</option>
 <option value="2" selected="selected">ChoiceOption 2</option>
 <option value="3" selected="selected">ChoiceOption 3</option>
 </select><input type="hidden" name="initial-multi_choice_int" value="2" id="initial-id_multi_choice_int_0" />
-<input type="hidden" name="initial-multi_choice_int" value="3" id="initial-id_multi_choice_int_1" /> <span class="helptext"> Hold down "Control", or "Command" on a Mac, to select more than one.</span></p>""")
+<input type="hidden" name="initial-multi_choice_int" value="3" id="initial-id_multi_choice_int_1" /></p>"""
+        )
 
 
 class FormsModelTestCase(TestCase):
     def test_unicode_filename(self):
         # FileModel with unicode filename and data #########################
-        f = FileForm(data={}, files={'file1': SimpleUploadedFile('我隻氣墊船裝滿晒鱔.txt', 'मेरी मँडराने वाली नाव सर्पमीनों से भरी ह'.encode('utf-8'))}, auto_id=False)
+        file1 = SimpleUploadedFile('我隻氣墊船裝滿晒鱔.txt', 'मेरी मँडराने वाली नाव सर्पमीनों से भरी ह'.encode('utf-8'))
+        f = FileForm(data={}, files={'file1': file1}, auto_id=False)
         self.assertTrue(f.is_valid())
-        self.assertTrue('file1' in f.cleaned_data)
+        self.assertIn('file1', f.cleaned_data)
         m = FileModel.objects.create(file=f.cleaned_data['file1'])
         self.assertEqual(m.file.name, 'tests/\u6211\u96bb\u6c23\u588a\u8239\u88dd\u6eff\u6652\u9c54.txt')
         m.delete()
 
     def test_boundary_conditions(self):
-        # Boundary conditions on a PostitiveIntegerField #########################
+        # Boundary conditions on a PositiveIntegerField #########################
         class BoundaryForm(ModelForm):
             class Meta:
                 model = BoundaryModel
@@ -218,19 +239,20 @@ class FormsModelTestCase(TestCase):
         self.assertEqual(obj.def_date, datetime.date(1999, 3, 2))
 
 
-class RelatedModelFormTests(TestCase):
+class RelatedModelFormTests(SimpleTestCase):
     def test_invalid_loading_order(self):
         """
         Test for issue 10405
         """
         class A(models.Model):
-            ref = models.ForeignKey("B")
+            ref = models.ForeignKey("B", models.CASCADE)
 
         class Meta:
             model = A
             fields = '__all__'
 
-        self.assertRaises(ValueError, ModelFormMetaclass, str('Form'), (ModelForm,), {'Meta': Meta})
+        with self.assertRaises(ValueError):
+            ModelFormMetaclass(str('Form'), (ModelForm,), {'Meta': Meta})
 
         class B(models.Model):
             pass
@@ -239,14 +261,14 @@ class RelatedModelFormTests(TestCase):
         """
         Test for issue 10405
         """
-        class A(models.Model):
-            ref = models.ForeignKey("B")
+        class C(models.Model):
+            ref = models.ForeignKey("D", models.CASCADE)
 
-        class B(models.Model):
+        class D(models.Model):
             pass
 
         class Meta:
-            model = A
+            model = C
             fields = '__all__'
 
         self.assertTrue(issubclass(ModelFormMetaclass(str('Form'), (ModelForm,), {'Meta': Meta}), ModelForm))
@@ -269,7 +291,8 @@ class ManyToManyExclusionTestCase(TestCase):
             'multi_choice_int': [opt1.pk],
         }
         instance = ChoiceFieldModel.objects.create(**initial)
-        instance.multi_choice = instance.multi_choice_int = [opt2, opt3]
+        instance.multi_choice.set([opt2, opt3])
+        instance.multi_choice_int.set([opt2, opt3])
         form = ChoiceFieldExclusionForm(data=data, instance=instance)
         self.assertTrue(form.is_valid())
         self.assertEqual(form.cleaned_data['multi_choice'], data['multi_choice'])
@@ -283,23 +306,28 @@ class ManyToManyExclusionTestCase(TestCase):
 class EmptyLabelTestCase(TestCase):
     def test_empty_field_char(self):
         f = EmptyCharLabelChoiceForm()
-        self.assertHTMLEqual(f.as_p(),
+        self.assertHTMLEqual(
+            f.as_p(),
             """<p><label for="id_name">Name:</label> <input id="id_name" maxlength="10" name="name" type="text" /></p>
 <p><label for="id_choice">Choice:</label> <select id="id_choice" name="choice">
 <option value="" selected="selected">No Preference</option>
 <option value="f">Foo</option>
 <option value="b">Bar</option>
-</select></p>""")
+</select></p>"""
+        )
 
     def test_empty_field_char_none(self):
         f = EmptyCharLabelNoneChoiceForm()
-        self.assertHTMLEqual(f.as_p(),
+        self.assertHTMLEqual(
+            f.as_p(),
             """<p><label for="id_name">Name:</label> <input id="id_name" maxlength="10" name="name" type="text" /></p>
-<p><label for="id_choice_string_w_none">Choice string w none:</label> <select id="id_choice_string_w_none" name="choice_string_w_none">
+<p><label for="id_choice_string_w_none">Choice string w none:</label>
+<select id="id_choice_string_w_none" name="choice_string_w_none">
 <option value="" selected="selected">No Preference</option>
 <option value="f">Foo</option>
 <option value="b">Bar</option>
-</select></p>""")
+</select></p>"""
+        )
 
     def test_save_empty_label_forms(self):
         # Test that saving a form with a blank choice results in the expected
@@ -316,40 +344,51 @@ class EmptyLabelTestCase(TestCase):
             m = f.save()
             self.assertEqual(expected, getattr(m, key))
             self.assertEqual('No Preference',
-                             getattr(m, 'get_{0}_display'.format(key))())
+                             getattr(m, 'get_{}_display'.format(key))())
 
     def test_empty_field_integer(self):
         f = EmptyIntegerLabelChoiceForm()
-        self.assertHTMLEqual(f.as_p(),
+        self.assertHTMLEqual(
+            f.as_p(),
             """<p><label for="id_name">Name:</label> <input id="id_name" maxlength="10" name="name" type="text" /></p>
-<p><label for="id_choice_integer">Choice integer:</label> <select id="id_choice_integer" name="choice_integer">
+<p><label for="id_choice_integer">Choice integer:</label>
+<select id="id_choice_integer" name="choice_integer">
 <option value="" selected="selected">No Preference</option>
 <option value="1">Foo</option>
 <option value="2">Bar</option>
-</select></p>""")
+</select></p>"""
+        )
 
     def test_get_display_value_on_none(self):
         m = ChoiceModel.objects.create(name='test', choice='', choice_integer=None)
-        self.assertEqual(None, m.choice_integer)
+        self.assertIsNone(m.choice_integer)
         self.assertEqual('No Preference', m.get_choice_integer_display())
 
     def test_html_rendering_of_prepopulated_models(self):
         none_model = ChoiceModel(name='none-test', choice_integer=None)
         f = EmptyIntegerLabelChoiceForm(instance=none_model)
-        self.assertHTMLEqual(f.as_p(),
-            """<p><label for="id_name">Name:</label> <input id="id_name" maxlength="10" name="name" type="text" value="none-test"/></p>
-<p><label for="id_choice_integer">Choice integer:</label> <select id="id_choice_integer" name="choice_integer">
+        self.assertHTMLEqual(
+            f.as_p(),
+            """<p><label for="id_name">Name:</label>
+<input id="id_name" maxlength="10" name="name" type="text" value="none-test"/></p>
+<p><label for="id_choice_integer">Choice integer:</label>
+<select id="id_choice_integer" name="choice_integer">
 <option value="" selected="selected">No Preference</option>
 <option value="1">Foo</option>
 <option value="2">Bar</option>
-</select></p>""")
+</select></p>"""
+        )
 
         foo_model = ChoiceModel(name='foo-test', choice_integer=1)
         f = EmptyIntegerLabelChoiceForm(instance=foo_model)
-        self.assertHTMLEqual(f.as_p(),
-            """<p><label for="id_name">Name:</label> <input id="id_name" maxlength="10" name="name" type="text" value="foo-test"/></p>
-<p><label for="id_choice_integer">Choice integer:</label> <select id="id_choice_integer" name="choice_integer">
+        self.assertHTMLEqual(
+            f.as_p(),
+            """<p><label for="id_name">Name:</label>
+<input id="id_name" maxlength="10" name="name" type="text" value="foo-test"/></p>
+<p><label for="id_choice_integer">Choice integer:</label>
+<select id="id_choice_integer" name="choice_integer">
 <option value="">No Preference</option>
 <option value="1" selected="selected">Foo</option>
 <option value="2">Bar</option>
-</select></p>""")
+</select></p>"""
+        )

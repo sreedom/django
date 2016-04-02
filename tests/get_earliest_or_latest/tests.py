@@ -4,7 +4,7 @@ from datetime import datetime
 
 from django.test import TestCase
 
-from .models import Article, Person
+from .models import Article, IndexErrorArticle, Person
 
 
 class EarliestOrLatestTests(TestCase):
@@ -17,7 +17,8 @@ class EarliestOrLatestTests(TestCase):
 
     def test_earliest(self):
         # Because no Articles exist yet, earliest() raises ArticleDoesNotExist.
-        self.assertRaises(Article.DoesNotExist, Article.objects.earliest)
+        with self.assertRaises(Article.DoesNotExist):
+            Article.objects.earliest()
 
         a1 = Article.objects.create(
             headline="Article 1", pub_date=datetime(2005, 7, 26),
@@ -57,16 +58,17 @@ class EarliestOrLatestTests(TestCase):
         # Ensure that error is raised if the user forgot to add a get_latest_by
         # in the Model.Meta
         Article.objects.model._meta.get_latest_by = None
-        self.assertRaisesMessage(
+        with self.assertRaisesMessage(
             AssertionError,
             "earliest() and latest() require either a field_name parameter or "
-            "'get_latest_by' in the model",
-            lambda: Article.objects.earliest(),
-        )
+            "'get_latest_by' in the model"
+        ):
+            Article.objects.earliest()
 
     def test_latest(self):
         # Because no Articles exist yet, latest() raises ArticleDoesNotExist.
-        self.assertRaises(Article.DoesNotExist, Article.objects.latest)
+        with self.assertRaises(Article.DoesNotExist):
+            Article.objects.latest()
 
         a1 = Article.objects.create(
             headline="Article 1", pub_date=datetime(2005, 7, 26),
@@ -107,20 +109,24 @@ class EarliestOrLatestTests(TestCase):
         # Ensure that error is raised if the user forgot to add a get_latest_by
         # in the Model.Meta
         Article.objects.model._meta.get_latest_by = None
-        self.assertRaisesMessage(
+        with self.assertRaisesMessage(
             AssertionError,
             "earliest() and latest() require either a field_name parameter or "
-            "'get_latest_by' in the model",
-            lambda: Article.objects.latest(),
-        )
+            "'get_latest_by' in the model"
+        ):
+            Article.objects.latest()
 
     def test_latest_manual(self):
         # You can still use latest() with a model that doesn't have
         # "get_latest_by" set -- just pass in the field name manually.
         Person.objects.create(name="Ralph", birthday=datetime(1950, 1, 1))
         p2 = Person.objects.create(name="Stephanie", birthday=datetime(1960, 2, 3))
-        self.assertRaises(AssertionError, Person.objects.latest)
+        with self.assertRaises(AssertionError):
+            Person.objects.latest()
         self.assertEqual(Person.objects.latest("birthday"), p2)
+
+
+class TestFirstLast(TestCase):
 
     def test_first(self):
         p1 = Person.objects.create(name="Bob", birthday=datetime(1950, 1, 1))
@@ -152,3 +158,27 @@ class EarliestOrLatestTests(TestCase):
         self.assertIs(
             Person.objects.filter(birthday__lte=datetime(1940, 1, 1)).last(),
             None)
+
+    def test_index_error_not_suppressed(self):
+        """
+        #23555 -- Unexpected IndexError exceptions in QuerySet iteration
+        shouldn't be suppressed.
+        """
+        def check():
+            # We know that we've broken the __iter__ method, so the queryset
+            # should always raise an exception.
+            with self.assertRaises(IndexError):
+                IndexErrorArticle.objects.all()[0]
+            with self.assertRaises(IndexError):
+                IndexErrorArticle.objects.all().first()
+            with self.assertRaises(IndexError):
+                IndexErrorArticle.objects.all().last()
+
+        check()
+
+        # And it does not matter if there are any records in the DB.
+        IndexErrorArticle.objects.create(
+            headline="Article 1", pub_date=datetime(2005, 7, 26),
+            expire_date=datetime(2005, 9, 1)
+        )
+        check()

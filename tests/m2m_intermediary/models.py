@@ -1,5 +1,5 @@
 """
-9. Many-to-many relationships via an intermediary table
+Many-to-many relationships via an intermediary table
 
 For many-to-many relationships that need extra fields on the intermediary
 table, use an intermediary model.
@@ -35,8 +35,8 @@ class Article(models.Model):
 
 @python_2_unicode_compatible
 class Writer(models.Model):
-    reporter = models.ForeignKey(Reporter)
-    article = models.ForeignKey(Article)
+    reporter = models.ForeignKey(Reporter, models.CASCADE)
+    article = models.ForeignKey(Article, models.CASCADE)
     position = models.CharField(max_length=100)
 
     def __str__(self):

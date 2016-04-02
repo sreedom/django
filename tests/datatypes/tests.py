@@ -14,7 +14,7 @@ class DataTypesTestCase(TestCase):
     def test_boolean_type(self):
         d = Donut(name='Apple Fritter')
         self.assertFalse(d.is_frosted)
-        self.assertTrue(d.has_sprinkles is None)
+        self.assertIsNone(d.has_sprinkles)
         d.has_sprinkles = True
         self.assertTrue(d.has_sprinkles)
 
@@ -82,8 +82,9 @@ class DataTypesTestCase(TestCase):
         an error if given a timezone-aware datetime object."""
         dt = datetime.datetime(2008, 8, 31, 16, 20, tzinfo=utc)
         d = Donut(name='Bear claw', consumed_at=dt)
-        self.assertRaises(ValueError, d.save)
-        # ValueError: MySQL backend does not support timezone-aware datetimes.
+        # MySQL backend does not support timezone-aware datetimes.
+        with self.assertRaises(ValueError):
+            d.save()
 
     def test_datefield_auto_now_add(self):
         """Regression test for #10970, auto_now_add for DateField should store
@@ -91,6 +92,7 @@ class DataTypesTestCase(TestCase):
         b = RumBaba.objects.create()
         # Verify we didn't break DateTimeField behavior
         self.assertIsInstance(b.baked_timestamp, datetime.datetime)
-        # We need to test this this way because datetime.datetime inherits
+        # We need to test this way because datetime.datetime inherits
         # from datetime.date:
-        self.assertIsInstance(b.baked_date, datetime.date) and not isinstance(b.baked_date, datetime.datetime)
+        self.assertIsInstance(b.baked_date, datetime.date)
+        self.assertNotIsInstance(b.baked_date, datetime.datetime)

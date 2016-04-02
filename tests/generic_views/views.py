@@ -2,12 +2,12 @@ from __future__ import unicode_literals
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.core.urlresolvers import reverse, reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import generic
 
-from .test_forms import AuthorForm, ContactForm
-from .models import Artist, Author, Book, Page, BookSigning
+from .forms import AuthorForm, ContactForm
+from .models import Artist, Author, Book, BookSigning, Page
 
 
 class CustomTemplateView(generic.TemplateView):
@@ -34,6 +34,17 @@ class AuthorDetail(generic.DetailView):
     queryset = Author.objects.all()
 
 
+class AuthorCustomDetail(generic.DetailView):
+    template_name = 'generic_views/author_detail.html'
+    queryset = Author.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        # Ensures get_context_object_name() doesn't reference self.object.
+        author = self.get_object()
+        context = {'custom_' + self.get_context_object_name(author): author}
+        return self.render_to_response(context)
+
+
 class PageDetail(generic.DetailView):
     queryset = Page.objects.all()
     template_name_field = 'template'
@@ -55,6 +66,10 @@ class ArtistList(generic.ListView):
 
 class AuthorList(generic.ListView):
     queryset = Author.objects.all()
+
+
+class BookList(generic.ListView):
+    model = Book
 
 
 class CustomPaginator(Paginator):
@@ -132,9 +147,14 @@ class NaiveAuthorUpdate(generic.UpdateView):
 
 
 class AuthorUpdate(generic.UpdateView):
+    get_form_called_count = 0  # Used to ensure get_form() is called once.
     model = Author
     success_url = '/list/authors/'
     fields = '__all__'
+
+    def get_form(self, *args, **kwargs):
+        self.get_form_called_count += 1
+        return super(AuthorUpdate, self).get_form(*args, **kwargs)
 
 
 class OneAuthorUpdate(generic.UpdateView):
@@ -168,9 +188,7 @@ class SpecializedAuthorDelete(generic.DeleteView):
     queryset = Author.objects.all()
     template_name = 'generic_views/confirm_delete.html'
     context_object_name = 'thingy'
-
-    def get_success_url(self):
-        return reverse('authors_list')
+    success_url = reverse_lazy('authors_list')
 
 
 class BookConfig(object):
@@ -216,7 +234,7 @@ class AuthorGetQuerySetFormView(generic.edit.ModelFormMixin):
 class BookDetailGetObjectCustomQueryset(BookDetail):
     def get_object(self, queryset=None):
         return super(BookDetailGetObjectCustomQueryset, self).get_object(
-            queryset=Book.objects.filter(pk=2))
+            queryset=Book.objects.filter(pk=self.kwargs['pk']))
 
 
 class CustomMultipleObjectMixinView(generic.list.MultipleObjectMixin, generic.View):
@@ -300,3 +318,18 @@ class NonModelDetail(generic.DetailView):
 
     def get_object(self, queryset=None):
         return NonModel()
+
+
+class ObjectDoesNotExistDetail(generic.DetailView):
+    def get_queryset(self):
+        return Book.does_not_exist.all()
+
+
+class LateValidationView(generic.FormView):
+    form_class = ContactForm
+    success_url = reverse_lazy('authors_list')
+    template_name = 'generic_views/form.html'
+
+    def form_valid(self, form):
+        form.add_error(None, 'There is an error')
+        return self.form_invalid(form)

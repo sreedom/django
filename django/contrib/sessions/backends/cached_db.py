@@ -6,7 +6,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.sessions.backends.db import SessionStore as DBStore
-from django.core.cache import get_cache
+from django.core.cache import caches
 from django.core.exceptions import SuspiciousOperation
 from django.utils import timezone
 from django.utils.encoding import force_text
@@ -18,18 +18,19 @@ class SessionStore(DBStore):
     """
     Implements cached, database backed sessions.
     """
+    cache_key_prefix = KEY_PREFIX
 
     def __init__(self, session_key=None):
-        self._cache = get_cache(settings.SESSION_CACHE_ALIAS)
+        self._cache = caches[settings.SESSION_CACHE_ALIAS]
         super(SessionStore, self).__init__(session_key)
 
     @property
     def cache_key(self):
-        return KEY_PREFIX + self._get_or_create_session_key()
+        return self.cache_key_prefix + self._get_or_create_session_key()
 
     def load(self):
         try:
-            data = self._cache.get(self.cache_key, None)
+            data = self._cache.get(self.cache_key)
         except Exception:
             # Some backends (e.g. memcache) raise an exception on invalid
             # cache keys. If this happens, reset the session. See #17810.
@@ -39,24 +40,24 @@ class SessionStore(DBStore):
             # Duplicate DBStore.load, because we need to keep track
             # of the expiry date to set it properly in the cache.
             try:
-                s = Session.objects.get(
+                s = self.model.objects.get(
                     session_key=self.session_key,
                     expire_date__gt=timezone.now()
                 )
                 data = self.decode(s.session_data)
                 self._cache.set(self.cache_key, data,
                     self.get_expiry_age(expiry=s.expire_date))
-            except (Session.DoesNotExist, SuspiciousOperation) as e:
+            except (self.model.DoesNotExist, SuspiciousOperation) as e:
                 if isinstance(e, SuspiciousOperation):
                     logger = logging.getLogger('django.security.%s' %
                             e.__class__.__name__)
                     logger.warning(force_text(e))
-                self.create()
+                self._session_key = None
                 data = {}
         return data
 
     def exists(self, session_key):
-        if (KEY_PREFIX + session_key) in self._cache:
+        if session_key and (self.cache_key_prefix + session_key) in self._cache:
             return True
         return super(SessionStore, self).exists(session_key)
 
@@ -70,7 +71,7 @@ class SessionStore(DBStore):
             if self.session_key is None:
                 return
             session_key = self.session_key
-        self._cache.delete(KEY_PREFIX + session_key)
+        self._cache.delete(self.cache_key_prefix + session_key)
 
     def flush(self):
         """
@@ -79,8 +80,4 @@ class SessionStore(DBStore):
         """
         self.clear()
         self.delete(self.session_key)
-        self.create()
-
-
-# At bottom to avoid circular import
-from django.contrib.sessions.models import Session
+        self._session_key = None

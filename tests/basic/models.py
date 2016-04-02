@@ -1,6 +1,6 @@
-# coding: utf-8
+# -*- coding: utf-8 -*-
 """
-1. Bare-bones model
+Bare-bones model
 
 This is a basic model with only two non-primary-key fields.
 """
@@ -28,8 +28,15 @@ class ArticleSelectOnSave(Article):
 
 @python_2_unicode_compatible
 class SelfRef(models.Model):
-    selfref = models.ForeignKey('self', null=True, blank=True,
-                                related_name='+')
+    selfref = models.ForeignKey(
+        'self',
+        models.SET_NULL,
+        null=True, blank=True,
+        related_name='+',
+    )
+    article = models.ForeignKey(Article, models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
+        # This method intentionally doesn't work for all cases - part
+        # of the test for ticket #20278
         return SelfRef.objects.get(selfref=self).pk

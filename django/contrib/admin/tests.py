@@ -1,12 +1,20 @@
-import os
-from unittest import SkipTest
-
-from django.contrib.staticfiles.testing import StaticLiveServerCase
-from django.utils.module_loading import import_by_path
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.test import modify_settings
+from django.test.selenium import SeleniumTestCase
 from django.utils.translation import ugettext as _
 
 
-class AdminSeleniumWebDriverTestCase(StaticLiveServerCase):
+class CSPMiddleware(object):
+    """The admin's JavaScript should be compatible with CSP."""
+    def process_response(self, request, response):
+        response['Content-Security-Policy'] = "default-src 'self'"
+        return response
+
+
+@modify_settings(
+    MIDDLEWARE_CLASSES={'append': 'django.contrib.admin.tests.CSPMiddleware'},
+)
+class AdminSeleniumTestCase(SeleniumTestCase, StaticLiveServerTestCase):
 
     available_apps = [
         'django.contrib.admin',
@@ -15,26 +23,6 @@ class AdminSeleniumWebDriverTestCase(StaticLiveServerCase):
         'django.contrib.sessions',
         'django.contrib.sites',
     ]
-    webdriver_class = 'selenium.webdriver.firefox.webdriver.WebDriver'
-
-    @classmethod
-    def setUpClass(cls):
-        if not os.environ.get('DJANGO_SELENIUM_TESTS', False):
-            raise SkipTest('Selenium tests not requested')
-        try:
-            cls.selenium = import_by_path(cls.webdriver_class)()
-        except Exception as e:
-            raise SkipTest('Selenium webdriver "%s" not installed or not '
-                           'operational: %s' % (cls.webdriver_class, str(e)))
-        # This has to be last to ensure that resources are cleaned up properly!
-        super(AdminSeleniumWebDriverTestCase, cls).setUpClass()
-
-    @classmethod
-    def _tearDownClassInternal(cls):
-        if hasattr(cls, 'selenium'):
-            cls.selenium.refresh()  # see ticket #21227
-            cls.selenium.quit()
-        super(AdminSeleniumWebDriverTestCase, cls)._tearDownClassInternal()
 
     def wait_until(self, callback, timeout=10):
         """
@@ -46,13 +34,67 @@ class AdminSeleniumWebDriverTestCase(StaticLiveServerCase):
         from selenium.webdriver.support.wait import WebDriverWait
         WebDriverWait(self.selenium, timeout).until(callback)
 
-    def wait_loaded_tag(self, tag_name, timeout=10):
+    def wait_for_popup(self, num_windows=2, timeout=10):
         """
-        Helper function that blocks until the element with the given tag name
-        is found on the page.
+        Block until `num_windows` are present (usually 2, but can be
+        overridden in the case of pop-ups opening other pop-ups).
         """
+        self.wait_until(lambda d: len(d.window_handles) == num_windows, timeout)
+
+    def wait_for(self, css_selector, timeout=10):
+        """
+        Helper function that blocks until a CSS selector is found on the page.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support import expected_conditions as ec
         self.wait_until(
-            lambda driver: driver.find_element_by_tag_name(tag_name),
+            ec.presence_of_element_located((By.CSS_SELECTOR, css_selector)),
+            timeout
+        )
+
+    def wait_for_text(self, css_selector, text, timeout=10):
+        """
+        Helper function that blocks until the text is found in the CSS selector.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support import expected_conditions as ec
+        self.wait_until(
+            ec.text_to_be_present_in_element(
+                (By.CSS_SELECTOR, css_selector), text),
+            timeout
+        )
+
+    def wait_for_value(self, css_selector, text, timeout=10):
+        """
+        Helper function that blocks until the value is found in the CSS selector.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support import expected_conditions as ec
+        self.wait_until(
+            ec.text_to_be_present_in_element_value(
+                (By.CSS_SELECTOR, css_selector), text),
+            timeout
+        )
+
+    def wait_until_visible(self, css_selector, timeout=10):
+        """
+        Block until the element described by the CSS selector is visible.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support import expected_conditions as ec
+        self.wait_until(
+            ec.visibility_of_element_located((By.CSS_SELECTOR, css_selector)),
+            timeout
+        )
+
+    def wait_until_invisible(self, css_selector, timeout=10):
+        """
+        Block until the element described by the CSS selector is invisible.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support import expected_conditions as ec
+        self.wait_until(
+            ec.invisibility_of_element_located((By.CSS_SELECTOR, css_selector)),
             timeout
         )
 
@@ -63,9 +105,9 @@ class AdminSeleniumWebDriverTestCase(StaticLiveServerCase):
         from selenium.common.exceptions import TimeoutException
         try:
             # Wait for the next page to be loaded
-            self.wait_loaded_tag('body')
+            self.wait_for('body')
         except TimeoutException:
-            # IE7 occasionnally returns an error "Internet Explorer cannot
+            # IE7 occasionally returns an error "Internet Explorer cannot
             # display the webpage" and doesn't load the next page. We just
             # ignore it.
             pass

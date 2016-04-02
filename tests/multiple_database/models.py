@@ -1,6 +1,8 @@
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.fields import (
+    GenericForeignKey, GenericRelation,
+)
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes import generic
 from django.db import models
 from django.utils.encoding import python_2_unicode_compatible
 
@@ -8,9 +10,9 @@ from django.utils.encoding import python_2_unicode_compatible
 @python_2_unicode_compatible
 class Review(models.Model):
     source = models.CharField(max_length=100)
-    content_type = models.ForeignKey(ContentType)
+    content_type = models.ForeignKey(ContentType, models.CASCADE)
     object_id = models.PositiveIntegerField()
-    content_object = generic.GenericForeignKey()
+    content_object = GenericForeignKey()
 
     def __str__(self):
         return self.source
@@ -56,8 +58,8 @@ class Book(models.Model):
     title = models.CharField(max_length=100)
     published = models.DateField()
     authors = models.ManyToManyField(Person)
-    editor = models.ForeignKey(Person, null=True, related_name='edited')
-    reviews = generic.GenericRelation(Review)
+    editor = models.ForeignKey(Person, models.SET_NULL, null=True, related_name='edited')
+    reviews = GenericRelation(Review)
     pages = models.IntegerField(default=100)
 
     def __str__(self):
@@ -70,7 +72,7 @@ class Book(models.Model):
 @python_2_unicode_compatible
 class Pet(models.Model):
     name = models.CharField(max_length=100)
-    owner = models.ForeignKey(Person)
+    owner = models.ForeignKey(Person, models.CASCADE)
 
     def __str__(self):
         return self.name
@@ -80,7 +82,7 @@ class Pet(models.Model):
 
 
 class UserProfile(models.Model):
-    user = models.OneToOneField(User, null=True)
+    user = models.OneToOneField(User, models.SET_NULL, null=True)
     flavor = models.CharField(max_length=100)
 
     class Meta:

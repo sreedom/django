@@ -1,5 +1,5 @@
 """
-37. Fixtures.
+Fixtures.
 
 Fixtures are a way of loading data into the database in bulk. Fixure data
 can be stored in any serializable format (including JSON and XML). Fixtures
@@ -9,7 +9,7 @@ in the application directory, or in one of the directories named in the
 """
 
 from django.contrib.auth.models import Permission
-from django.contrib.contenttypes import generic
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils.encoding import python_2_unicode_compatible
@@ -42,7 +42,7 @@ class Article(models.Model):
 @python_2_unicode_compatible
 class Blog(models.Model):
     name = models.CharField(max_length=100)
-    featured = models.ForeignKey(Article, related_name='fixtures_featured_set')
+    featured = models.ForeignKey(Article, models.CASCADE, related_name='fixtures_featured_set')
     articles = models.ManyToManyField(Article, blank=True,
                                       related_name='fixtures_articles_set')
 
@@ -53,10 +53,9 @@ class Blog(models.Model):
 @python_2_unicode_compatible
 class Tag(models.Model):
     name = models.CharField(max_length=100)
-    tagged_type = models.ForeignKey(ContentType, related_name="fixtures_tag_set")
+    tagged_type = models.ForeignKey(ContentType, models.CASCADE, related_name="fixtures_tag_set")
     tagged_id = models.PositiveIntegerField(default=0)
-    tagged = generic.GenericForeignKey(ct_field='tagged_type',
-                                       fk_field='tagged_id')
+    tagged = GenericForeignKey(ct_field='tagged_type', fk_field='tagged_id')
 
     def __str__(self):
         return '<%s: %s> tagged "%s"' % (self.tagged.__class__.__name__,
@@ -93,9 +92,14 @@ class Spy(Person):
     cover_blown = models.BooleanField(default=False)
 
 
+class ProxySpy(Spy):
+    class Meta:
+        proxy = True
+
+
 @python_2_unicode_compatible
 class Visa(models.Model):
-    person = models.ForeignKey(Person)
+    person = models.ForeignKey(Person, models.CASCADE)
     permissions = models.ManyToManyField(Permission, blank=True)
 
     def __str__(self):

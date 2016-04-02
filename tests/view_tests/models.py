@@ -14,7 +14,7 @@ class Author(models.Model):
         return self.name
 
     def get_absolute_url(self):
-        return '/views/authors/%s/' % self.id
+        return '/authors/%s/' % self.id
 
 
 @python_2_unicode_compatible
@@ -25,7 +25,7 @@ class BaseArticle(models.Model):
     """
     title = models.CharField(max_length=100)
     slug = models.SlugField()
-    author = models.ForeignKey(Author)
+    author = models.ForeignKey(Author, models.CASCADE)
 
     class Meta:
         abstract = True

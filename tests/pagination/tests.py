@@ -1,15 +1,16 @@
 from __future__ import unicode_literals
 
-from datetime import datetime
 import unittest
+from datetime import datetime
 
-from django.core.paginator import (Paginator, EmptyPage, InvalidPage,
-    PageNotAnInteger)
+from django.core.paginator import (
+    EmptyPage, InvalidPage, PageNotAnInteger, Paginator,
+)
 from django.test import TestCase
 from django.utils import six
 
-from .models import Article
 from .custom import ValidAdjacentNumsPaginator
+from .models import Article
 
 
 class PaginationTests(unittest.TestCase):
@@ -113,9 +114,12 @@ class PaginationTests(unittest.TestCase):
         raised.
         """
         paginator = Paginator([1, 2, 3], 2)
-        self.assertRaises(InvalidPage, paginator.page, 3)
-        self.assertRaises(PageNotAnInteger, paginator.validate_number, None)
-        self.assertRaises(PageNotAnInteger, paginator.validate_number, 'x')
+        with self.assertRaises(InvalidPage):
+            paginator.page(3)
+        with self.assertRaises(PageNotAnInteger):
+            paginator.validate_number(None)
+        with self.assertRaises(PageNotAnInteger):
+            paginator.validate_number('x')
         # With no content and allow_empty_first_page=True, 1 is a valid page number
         paginator = Paginator([], 2)
         self.assertEqual(paginator.validate_number(1), 1)
@@ -202,9 +206,12 @@ class PaginationTests(unittest.TestCase):
             self.check_indexes(params, 'last', last)
 
         # When no items and no empty first page, we should get EmptyPage error.
-        self.assertRaises(EmptyPage, self.check_indexes, ([], 4, 0, False), 1, None)
-        self.assertRaises(EmptyPage, self.check_indexes, ([], 4, 1, False), 1, None)
-        self.assertRaises(EmptyPage, self.check_indexes, ([], 4, 2, False), 1, None)
+        with self.assertRaises(EmptyPage):
+            self.check_indexes(([], 4, 0, False), 1, None)
+        with self.assertRaises(EmptyPage):
+            self.check_indexes(([], 4, 1, False), 1, None)
+        with self.assertRaises(EmptyPage):
+            self.check_indexes(([], 4, 2, False), 1, None)
 
     def test_page_sequence(self):
         """
@@ -213,8 +220,8 @@ class PaginationTests(unittest.TestCase):
         eleven = 'abcdefghijk'
         page2 = Paginator(eleven, per_page=5, orphans=1).page(2)
         self.assertEqual(len(page2), 6)
-        self.assertTrue('k' in page2)
-        self.assertFalse('a' in page2)
+        self.assertIn('k', page2)
+        self.assertNotIn('a', page2)
         self.assertEqual(''.join(page2), 'fghijk')
         self.assertEqual(''.join(reversed(page2)), 'kjihgf')
 
@@ -231,6 +238,12 @@ class PaginationTests(unittest.TestCase):
         self.assertEqual(page1.next_page_number(), 2)
         self.assertEqual(page2.previous_page_number(), 1)
         self.assertIsNone(page2.next_page_number())
+
+    def test_page_range_iterator(self):
+        """
+        Paginator.page_range should be an iterator.
+        """
+        self.assertIsInstance(Paginator([1, 2, 3], 2).page_range, type(six.moves.range(0)))
 
 
 class ModelPaginationTests(TestCase):
@@ -260,7 +273,8 @@ class ModelPaginationTests(TestCase):
         self.assertFalse(p.has_previous())
         self.assertTrue(p.has_other_pages())
         self.assertEqual(2, p.next_page_number())
-        self.assertRaises(InvalidPage, p.previous_page_number)
+        with self.assertRaises(InvalidPage):
+            p.previous_page_number()
         self.assertEqual(1, p.start_index())
         self.assertEqual(5, p.end_index())
 
@@ -279,14 +293,15 @@ class ModelPaginationTests(TestCase):
         self.assertFalse(p.has_next())
         self.assertTrue(p.has_previous())
         self.assertTrue(p.has_other_pages())
-        self.assertRaises(InvalidPage, p.next_page_number)
+        with self.assertRaises(InvalidPage):
+            p.next_page_number()
         self.assertEqual(1, p.previous_page_number())
         self.assertEqual(6, p.start_index())
         self.assertEqual(9, p.end_index())
 
     def test_page_getitem(self):
         """
-        Tests proper behaviour of a paginator page __getitem__ (queryset
+        Tests proper behavior of a paginator page __getitem__ (queryset
         evaluation, slicing, exception raised).
         """
         paginator = Paginator(Article.objects.all(), 5)
@@ -295,7 +310,8 @@ class ModelPaginationTests(TestCase):
         # Make sure object_list queryset is not evaluated by an invalid __getitem__ call.
         # (this happens from the template engine when using eg: {% page_obj.has_previous %})
         self.assertIsNone(p.object_list._result_cache)
-        self.assertRaises(TypeError, lambda: p['has_previous'])
+        with self.assertRaises(TypeError):
+            p['has_previous']
         self.assertIsNone(p.object_list._result_cache)
         self.assertNotIsInstance(p.object_list, list)
 

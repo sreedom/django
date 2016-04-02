@@ -10,12 +10,14 @@ from unittest import expectedFailure
 from django import forms
 from django.test import TestCase
 
-from .models import (Place, Restaurant, ItalianRestaurant, ParkingLot,
-    ParkingLot2, ParkingLot3, Supplier, Wholesaler, Child, SelfRefParent,
-    SelfRefChild, ArticleWithAuthor, M2MChild, QualityControl, DerivedM,
-    Person, BirthdayParty, BachelorParty, MessyBachelorParty,
-    InternalCertificationAudit, BusStation, TrainStation, User, Profile,
-    ParkingLot4A, ParkingLot4B)
+from .models import (
+    ArticleWithAuthor, BachelorParty, BirthdayParty, BusStation, Child,
+    DerivedM, InternalCertificationAudit, ItalianRestaurant, M2MChild,
+    MessyBachelorParty, ParkingLot, ParkingLot2, ParkingLot3, ParkingLot4A,
+    ParkingLot4B, Person, Place, Profile, QualityControl, Restaurant,
+    SelfRefChild, SelfRefParent, Senator, Supplier, TrainStation, User,
+    Wholesaler,
+)
 
 
 class ModelInheritanceTest(TestCase):
@@ -165,18 +167,14 @@ class ModelInheritanceTest(TestCase):
             serves_hot_dogs=True,
             serves_pizza=False)
 
-        # This should delete both Restuarants, plus the related places, plus
+        # This should delete both Restaurants, plus the related places, plus
         # the ItalianRestaurant.
         Restaurant.objects.all().delete()
 
-        self.assertRaises(
-            Place.DoesNotExist,
-            Place.objects.get,
-            pk=ident)
-        self.assertRaises(
-            ItalianRestaurant.DoesNotExist,
-            ItalianRestaurant.objects.get,
-            pk=ident)
+        with self.assertRaises(Place.DoesNotExist):
+            Place.objects.get(pk=ident)
+        with self.assertRaises(ItalianRestaurant.DoesNotExist):
+            ItalianRestaurant.objects.get(pk=ident)
 
     def test_issue_6755(self):
         """
@@ -239,14 +237,12 @@ class ModelInheritanceTest(TestCase):
 
         self.assertEqual(c1.get_next_by_pub_date(), c2)
         self.assertEqual(c2.get_next_by_pub_date(), c3)
-        self.assertRaises(
-            ArticleWithAuthor.DoesNotExist,
-            c3.get_next_by_pub_date)
+        with self.assertRaises(ArticleWithAuthor.DoesNotExist):
+            c3.get_next_by_pub_date()
         self.assertEqual(c3.get_previous_by_pub_date(), c2)
         self.assertEqual(c2.get_previous_by_pub_date(), c1)
-        self.assertRaises(
-            ArticleWithAuthor.DoesNotExist,
-            c1.get_previous_by_pub_date)
+        with self.assertRaises(ArticleWithAuthor.DoesNotExist):
+            c1.get_previous_by_pub_date()
 
     def test_inherited_fields(self):
         """
@@ -258,7 +254,7 @@ class ModelInheritanceTest(TestCase):
         self.assertEqual(m2mchildren, [])
 
         # Ordering should not include any database column more than once (this
-        # is most likely to ocurr naturally with model inheritance, so we
+        # is most likely to occur naturally with model inheritance, so we
         # check it here). Regression test for #9390. This necessarily pokes at
         # the SQL string for the query, since the duplicate problems are only
         # apparent at that late stage.
@@ -348,10 +344,10 @@ class ModelInheritanceTest(TestCase):
 
         birthday = BirthdayParty.objects.create(
             name='Birthday party for Alice')
-        birthday.attendees = [p1, p3]
+        birthday.attendees.set([p1, p3])
 
         bachelor = BachelorParty.objects.create(name='Bachelor party for Bob')
-        bachelor.attendees = [p2, p4]
+        bachelor.attendees.set([p2, p4])
 
         parties = list(p1.birthdayparty_set.all())
         self.assertEqual(parties, [birthday])
@@ -363,13 +359,13 @@ class ModelInheritanceTest(TestCase):
         self.assertEqual(parties, [bachelor])
 
         # Check that a subclass of a subclass of an abstract model doesn't get
-        # it's own accessor.
+        # its own accessor.
         self.assertFalse(hasattr(p2, 'messybachelorparty_set'))
 
-        # ... but it does inherit the m2m from it's parent
+        # ... but it does inherit the m2m from its parent
         messy = MessyBachelorParty.objects.create(
             name='Bachelor party for Dave')
-        messy.attendees = [p4]
+        messy.attendees.set([p4])
         messy_parent = messy.bachelorparty_ptr
 
         parties = list(p4.bachelorparty_set.all())
@@ -412,13 +408,11 @@ class ModelInheritanceTest(TestCase):
         # when more than one model has a concrete->abstract->concrete
         # inheritance hierarchy.
         self.assertEqual(
-            len([field for field in BusStation._meta.local_fields
-                       if field.primary_key]),
+            len([field for field in BusStation._meta.local_fields if field.primary_key]),
             1
         )
         self.assertEqual(
-            len([field for field in TrainStation._meta.local_fields
-                       if field.primary_key]),
+            len([field for field in TrainStation._meta.local_fields if field.primary_key]),
             1
         )
         self.assertIs(BusStation._meta.pk.model, BusStation)
@@ -455,3 +449,60 @@ class ModelInheritanceTest(TestCase):
         # used in the qs and top contains direct pointer to the bottom model.
         qs = ItalianRestaurant.objects.values_list('serves_gnocchi').filter(name='foo')
         self.assertEqual(str(qs.query).count('JOIN'), 1)
+
+    def test_issue_21554(self):
+        senator = Senator.objects.create(
+            name='John Doe', title='X', state='Y'
+        )
+
+        senator = Senator.objects.get(pk=senator.pk)
+        self.assertEqual(senator.name, 'John Doe')
+        self.assertEqual(senator.title, 'X')
+        self.assertEqual(senator.state, 'Y')
+
+    def test_inheritance_resolve_columns(self):
+        Restaurant.objects.create(name='Bobs Cafe', address="Somewhere",
+                                  serves_pizza=True, serves_hot_dogs=True)
+        p = Place.objects.all().select_related('restaurant')[0]
+        self.assertIsInstance(p.restaurant.serves_pizza, bool)
+
+    def test_inheritance_select_related(self):
+        # Regression test for #7246
+        r1 = Restaurant.objects.create(
+            name="Nobu", serves_hot_dogs=True, serves_pizza=False
+        )
+        r2 = Restaurant.objects.create(
+            name="Craft", serves_hot_dogs=False, serves_pizza=True
+        )
+        Supplier.objects.create(name="John", restaurant=r1)
+        Supplier.objects.create(name="Jane", restaurant=r2)
+
+        self.assertQuerysetEqual(
+            Supplier.objects.order_by("name").select_related(), [
+                "Jane",
+                "John",
+            ],
+            attrgetter("name")
+        )
+
+        jane = Supplier.objects.order_by("name").select_related("restaurant")[0]
+        self.assertEqual(jane.restaurant.name, "Craft")
+
+    def test_related_filtering_query_efficiency_ticket_15844(self):
+        r = Restaurant.objects.create(
+            name="Guido's House of Pasta",
+            address='944 W. Fullerton',
+            serves_hot_dogs=True,
+            serves_pizza=False,
+        )
+        s = Supplier.objects.create(restaurant=r)
+        with self.assertNumQueries(1):
+            self.assertQuerysetEqual(
+                Supplier.objects.filter(restaurant=r),
+                [s], lambda x: x,
+            )
+        with self.assertNumQueries(1):
+            self.assertQuerysetEqual(
+                r.supplier_set.all(),
+                [s], lambda x: x,
+            )

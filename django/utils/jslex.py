@@ -1,5 +1,7 @@
 """JsLex: a lexer for Javascript"""
 # Originally from https://bitbucket.org/ned/jslex
+from __future__ import unicode_literals
+
 import re
 
 
@@ -23,7 +25,6 @@ def literals(choices, prefix="", suffix=""):
 
     If provided, `prefix` and `suffix` will be attached to each choice
     individually.
-
     """
     return "|".join(prefix + re.escape(c) + suffix for c in choices.split())
 
@@ -82,7 +83,7 @@ class JsLexer(Lexer):
     >>> list(lexer.lex("a = 1"))
     [('id', 'a'), ('ws', ' '), ('punct', '='), ('ws', ' '), ('dnum', '1')]
 
-    This doesn't properly handle non-Ascii characters in the Javascript source.
+    This doesn't properly handle non-ASCII characters in the Javascript source.
     """
 
     # Because these tokens are matched as alternatives in a regex, longer

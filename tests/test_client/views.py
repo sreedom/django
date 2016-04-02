@@ -4,10 +4,14 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core import mail
 from django.forms import fields
 from django.forms.forms import Form, ValidationError
-from django.forms.formsets import formset_factory, BaseFormSet
-from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
-from django.shortcuts import render_to_response
+from django.forms.formsets import BaseFormSet, formset_factory
+from django.http import (
+    HttpResponse, HttpResponseBadRequest, HttpResponseNotAllowed,
+    HttpResponseNotFound, HttpResponseRedirect,
+)
+from django.shortcuts import render
 from django.template import Context, Template
+from django.test import Client
 from django.utils.decorators import method_decorator
 from django.utils.six.moves.urllib.parse import urlencode
 
@@ -18,6 +22,31 @@ def get_view(request):
     c = Context({'var': request.GET.get('var', 42)})
 
     return HttpResponse(t.render(c))
+
+
+def trace_view(request):
+    """
+    A simple view that expects a TRACE request and echoes its status line.
+
+    TRACE requests should not have an entity; the view will return a 400 status
+    response if it is present.
+    """
+    if request.method.upper() != "TRACE":
+        return HttpResponseNotAllowed("TRACE")
+    elif request.body:
+        return HttpResponseBadRequest("TRACE requests MUST NOT include an entity")
+    else:
+        protocol = request.META["SERVER_PROTOCOL"]
+        t = Template(
+            '{{ method }} {{ uri }} {{ version }}',
+            name="TRACE Template",
+        )
+        c = Context({
+            'method': request.method,
+            'uri': request.path,
+            'version': protocol,
+        })
+        return HttpResponse(t.render(c))
 
 
 def post_view(request):
@@ -67,7 +96,7 @@ def redirect_view(request):
         query = '?' + urlencode(request.GET, True)
     else:
         query = ''
-    return HttpResponseRedirect('/test_client/get_view/' + query)
+    return HttpResponseRedirect('/get_view/' + query)
 
 
 def view_with_secure(request):
@@ -80,7 +109,7 @@ def view_with_secure(request):
 
 def double_redirect_view(request):
     "A view that redirects all requests to a redirection view"
-    return HttpResponseRedirect('/test_client/permanent_redirect_view/')
+    return HttpResponseRedirect('/permanent_redirect_view/')
 
 
 def bad_view(request):
@@ -139,12 +168,10 @@ def form_view_with_template(request):
     else:
         form = TestForm()
         message = 'GET form page'
-    return render_to_response('form_view.html',
-        {
-            'form': form,
-            'message': message
-        }
-    )
+    return render(request, 'form_view.html', {
+        'form': form,
+        'message': message,
+    })
 
 
 class BaseTestFormSet(BaseFormSet):
@@ -201,7 +228,9 @@ def login_protected_view_changed_redirect(request):
     c = Context({'user': request.user})
 
     return HttpResponse(t.render(c))
-login_protected_view_changed_redirect = login_required(redirect_field_name="redirect_to")(login_protected_view_changed_redirect)
+login_protected_view_changed_redirect = (
+    login_required(redirect_field_name="redirect_to")(login_protected_view_changed_redirect)
+)
 
 
 def _permission_protected_view(request):
@@ -213,7 +242,9 @@ def _permission_protected_view(request):
     c = Context({'user': request.user})
     return HttpResponse(t.render(c))
 permission_protected_view = permission_required('permission_not_granted')(_permission_protected_view)
-permission_protected_view_exception = permission_required('permission_not_granted', raise_exception=True)(_permission_protected_view)
+permission_protected_view_exception = (
+    permission_required('permission_not_granted', raise_exception=True)(_permission_protected_view)
+)
 
 
 class _ViewManager(object):
@@ -279,6 +310,16 @@ def mass_mail_sending_view(request):
     c.send_messages([m1, m2])
 
     return HttpResponse("Mail sent")
+
+
+def nesting_exception_view(request):
+    """
+    A view that uses a nested client to call another view and then raises an
+    exception.
+    """
+    client = Client()
+    client.get('/get_view/')
+    raise Exception('exception message')
 
 
 def django_project_redirect(request):

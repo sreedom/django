@@ -1,15 +1,16 @@
 from __future__ import unicode_literals
 
+from django.db import models
 from django.db.models import signals
 from django.dispatch import receiver
 from django.test import TestCase
+from django.test.utils import isolate_apps
 from django.utils import six
 
 from .models import Author, Book, Car, Person
 
 
-class SignalTests(TestCase):
-
+class BaseSignalTest(TestCase):
     def setUp(self):
         # Save up the number of connected signals so that we can check at the
         # end that all the signals we register get properly unregistered (#9989)
@@ -29,6 +30,22 @@ class SignalTests(TestCase):
             len(signals.post_delete.receivers),
         )
         self.assertEqual(self.pre_signals, post_signals)
+
+
+class SignalTests(BaseSignalTest):
+    def test_model_pre_init_and_post_init(self):
+        data = []
+
+        def pre_init_callback(sender, args, **kwargs):
+            data.append(kwargs['kwargs'])
+        signals.pre_init.connect(pre_init_callback)
+
+        def post_init_callback(sender, instance, **kwargs):
+            data.append(instance)
+        signals.post_init.connect(post_init_callback)
+
+        p1 = Person(first_name="John", last_name="Doe")
+        self.assertEqual(data, [{}, p1])
 
     def test_save_signals(self):
         data = []
@@ -152,7 +169,7 @@ class SignalTests(TestCase):
             data.append(instance)
 
         try:
-            c1 = Car.objects.create(make="Volkswagon", model="Passat")
+            c1 = Car.objects.create(make="Volkswagen", model="Passat")
             self.assertEqual(data, [c1, c1])
         finally:
             signals.pre_save.disconnect(decorated_handler)
@@ -206,9 +223,9 @@ class SignalTests(TestCase):
             data[:] = []
 
             # Assigning and removing to/from m2m shouldn't generate an m2m signal.
-            b1.authors = [a1]
+            b1.authors.set([a1])
             self.assertEqual(data, [])
-            b1.authors = []
+            b1.authors.set([])
             self.assertEqual(data, [])
         finally:
             signals.pre_save.disconnect(pre_save_handler)
@@ -239,3 +256,49 @@ class SignalTests(TestCase):
         self.assertTrue(a._run)
         self.assertTrue(b._run)
         self.assertEqual(signals.post_save.receivers, [])
+
+
+class LazyModelRefTest(BaseSignalTest):
+    def setUp(self):
+        super(LazyModelRefTest, self).setUp()
+        self.received = []
+
+    def receiver(self, **kwargs):
+        self.received.append(kwargs)
+
+    def test_invalid_sender_model_name(self):
+        with self.assertRaisesMessage(ValueError,
+                    "Specified sender must either be a model or a "
+                    "model name of the 'app_label.ModelName' form."):
+            signals.post_init.connect(self.receiver, sender='invalid')
+
+    def test_already_loaded_model(self):
+        signals.post_init.connect(
+            self.receiver, sender='signals.Book', weak=False
+        )
+        try:
+            instance = Book()
+            self.assertEqual(self.received, [{
+                'signal': signals.post_init,
+                'sender': Book,
+                'instance': instance
+            }])
+        finally:
+            signals.post_init.disconnect(self.receiver, sender=Book)
+
+    @isolate_apps('signals')
+    def test_not_loaded_model(self):
+        signals.post_init.connect(
+            self.receiver, sender='signals.Created', weak=False
+        )
+
+        try:
+            class Created(models.Model):
+                pass
+
+            instance = Created()
+            self.assertEqual(self.received, [{
+                'signal': signals.post_init, 'sender': Created, 'instance': instance
+            }])
+        finally:
+            signals.post_init.disconnect(self.receiver, sender=Created)

@@ -1,10 +1,10 @@
 from __future__ import unicode_literals
 
 from django.forms.models import inlineformset_factory
-from django.test import TestCase
+from django.test import TestCase, skipUnlessDBFeature
 from django.utils import six
 
-from .models import Poet, Poem, School, Parent, Child
+from .models import Child, Parent, Poem, Poet, School
 
 
 class DeletionTests(TestCase):
@@ -123,30 +123,26 @@ class InlineFormsetFactoryTest(TestCase):
         Child has two ForeignKeys to Parent, so if we don't specify which one
         to use for the inline formset, we should get an exception.
         """
-        six.assertRaisesRegex(self, Exception,
-            "<class 'inline_formsets.models.Child'> has more than 1 ForeignKey to <class 'inline_formsets.models.Parent'>",
-            inlineformset_factory, Parent, Child
-        )
+        msg = "'inline_formsets.Child' has more than one ForeignKey to 'inline_formsets.Parent'."
+        with self.assertRaisesMessage(ValueError, msg):
+            inlineformset_factory(Parent, Child)
 
     def test_fk_name_not_foreign_key_field_from_child(self):
         """
         If we specify fk_name, but it isn't a ForeignKey from the child model
         to the parent model, we should get an exception.
         """
-        self.assertRaises(Exception,
-            "fk_name 'school' is not a ForeignKey to <class 'inline_formsets.models.Parent'>",
-            inlineformset_factory, Parent, Child, fk_name='school'
-        )
+        msg = "fk_name 'school' is not a ForeignKey to 'inline_formsets.Parent'."
+        with self.assertRaisesMessage(ValueError, msg):
+            inlineformset_factory(Parent, Child, fk_name='school')
 
     def test_non_foreign_key_field(self):
         """
         If the field specified in fk_name is not a ForeignKey, we should get an
         exception.
         """
-        six.assertRaisesRegex(self, Exception,
-            "<class 'inline_formsets.models.Child'> has no field named 'test'",
-            inlineformset_factory, Parent, Child, fk_name='test'
-        )
+        with self.assertRaisesMessage(ValueError, "'inline_formsets.Child' has no field named 'test'."):
+            inlineformset_factory(Parent, Child, fk_name='test')
 
     def test_any_iterable_allowed_as_argument_to_exclude(self):
         # Regression test for #9171.
@@ -157,3 +153,26 @@ class InlineFormsetFactoryTest(TestCase):
         inlineformset_factory(
             Parent, Child, exclude=('school',), fk_name='mother'
         )
+
+    @skipUnlessDBFeature('allows_auto_pk_0')
+    def test_zero_primary_key(self):
+        # Regression test for #21472
+        poet = Poet.objects.create(id=0, name='test')
+        poet.poem_set.create(name='test poem')
+        PoemFormSet = inlineformset_factory(Poet, Poem, fields="__all__", extra=0)
+        formset = PoemFormSet(None, instance=poet)
+        self.assertEqual(len(formset.forms), 1)
+
+    def test_unsaved_fk_validate_unique(self):
+        poet = Poet(name='unsaved')
+        PoemFormSet = inlineformset_factory(Poet, Poem, fields=['name'])
+        data = {
+            'poem_set-TOTAL_FORMS': '2',
+            'poem_set-INITIAL_FORMS': '0',
+            'poem_set-MAX_NUM_FORMS': '2',
+            'poem_set-0-name': 'Poem',
+            'poem_set-1-name': 'Poem',
+        }
+        formset = PoemFormSet(data, instance=poet)
+        self.assertFalse(formset.is_valid())
+        self.assertEqual(formset.non_form_errors(), ['Please correct the duplicate data for name.'])

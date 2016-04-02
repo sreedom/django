@@ -2,10 +2,12 @@
 Various edge-cases for model managers.
 """
 
-from django.db import models
-from django.contrib.contenttypes import generic
+from django.contrib.contenttypes.fields import (
+    GenericForeignKey, GenericRelation,
+)
 from django.contrib.contenttypes.models import ContentType
-from django.utils.encoding import python_2_unicode_compatible, force_text
+from django.db import models
+from django.utils.encoding import force_text, python_2_unicode_compatible
 
 
 class OnlyFred(models.Manager):
@@ -126,7 +128,8 @@ class Child7(Parent):
 # RelatedManagers
 @python_2_unicode_compatible
 class RelatedModel(models.Model):
-    test_gfk = generic.GenericRelation('RelationModel', content_type_field='gfk_ctype', object_id_field='gfk_id')
+    test_gfk = GenericRelation('RelationModel', content_type_field='gfk_ctype', object_id_field='gfk_id')
+    exact = models.NullBooleanField()
 
     def __str__(self):
         return force_text(self.pk)
@@ -134,13 +137,13 @@ class RelatedModel(models.Model):
 
 @python_2_unicode_compatible
 class RelationModel(models.Model):
-    fk = models.ForeignKey(RelatedModel, related_name='test_fk')
+    fk = models.ForeignKey(RelatedModel, models.CASCADE, related_name='test_fk')
 
     m2m = models.ManyToManyField(RelatedModel, related_name='test_m2m')
 
-    gfk_ctype = models.ForeignKey(ContentType)
-    gfk_id = models.IntegerField()
-    gfk = generic.GenericForeignKey(ct_field='gfk_ctype', fk_field='gfk_id')
+    gfk_ctype = models.ForeignKey(ContentType, models.SET_NULL, null=True)
+    gfk_id = models.IntegerField(null=True)
+    gfk = GenericForeignKey(ct_field='gfk_ctype', fk_field='gfk_id')
 
     def __str__(self):
         return force_text(self.pk)

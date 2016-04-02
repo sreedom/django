@@ -1,3 +1,4 @@
+====================================
 Form handling with class-based views
 ====================================
 
@@ -12,12 +13,14 @@ Implementing this yourself often results in a lot of repeated boilerplate code
 this, Django provides a collection of generic class-based views for form
 processing.
 
-Basic Forms
------------
+Basic forms
+===========
 
-Given a simple contact form::
+Given a simple contact form:
 
-    # forms.py
+.. snippet::
+    :filename: forms.py
+
     from django import forms
 
     class ContactForm(forms.Form):
@@ -28,9 +31,11 @@ Given a simple contact form::
             # send email using the self.cleaned_data dictionary
             pass
 
-The view can be constructed using a ``FormView``::
+The view can be constructed using a ``FormView``:
 
-    # views.py
+.. snippet::
+    :filename: views.py
+
     from myapp.forms import ContactForm
     from django.views.generic.edit import FormView
 
@@ -55,8 +60,8 @@ Notes:
   :meth:`~django.views.generic.edit.FormMixin.form_valid` simply
   redirects to the :attr:`~django.views.generic.edit.FormMixin.success_url`.
 
-Model Forms
------------
+Model forms
+===========
 
 Generic views really shine when working with models.  These generic
 views will automatically create a :class:`~django.forms.ModelForm`, so long as
@@ -91,10 +96,10 @@ add extra validation) simply set
 First we need to add :meth:`~django.db.models.Model.get_absolute_url()` to our
 ``Author`` class:
 
-.. code-block:: python
+.. snippet::
+    :filename: models.py
 
-    # models.py
-    from django.core.urlresolvers import reverse
+    from django.urls import reverse
     from django.db import models
 
     class Author(models.Model):
@@ -105,11 +110,13 @@ First we need to add :meth:`~django.db.models.Model.get_absolute_url()` to our
 
 Then we can use :class:`CreateView` and friends to do the actual
 work. Notice how we're just configuring the generic class-based views
-here; we don't have to write any logic ourselves::
+here; we don't have to write any logic ourselves:
 
-    # views.py
+.. snippet::
+    :filename: views.py
+
     from django.views.generic.edit import CreateView, UpdateView, DeleteView
-    from django.core.urlresolvers import reverse_lazy
+    from django.urls import reverse_lazy
     from myapp.models import Author
 
     class AuthorCreate(CreateView):
@@ -125,32 +132,32 @@ here; we don't have to write any logic ourselves::
         success_url = reverse_lazy('author-list')
 
 .. note::
-    We have to use :func:`~django.core.urlresolvers.reverse_lazy` here, not
-    just ``reverse`` as the urls are not loaded when the file is imported.
+    We have to use :func:`~django.urls.reverse_lazy` here, not just
+    ``reverse()`` as the urls are not loaded when the file is imported.
 
-.. versionchanged:: 1.6
+The ``fields`` attribute works the same way as the ``fields`` attribute on the
+inner ``Meta`` class on :class:`~django.forms.ModelForm`. Unless you define the
+form class in another way, the attribute is required and the view will raise
+an :exc:`~django.core.exceptions.ImproperlyConfigured` exception if it's not.
 
-In Django 1.6, the ``fields`` attribute was added, which works the same way as
-the ``fields`` attribute on the inner ``Meta`` class on
-:class:`~django.forms.ModelForm`.
+If you specify both the :attr:`~django.views.generic.edit.ModelFormMixin.fields`
+and :attr:`~django.views.generic.edit.FormMixin.form_class` attributes, an
+:exc:`~django.core.exceptions.ImproperlyConfigured` exception will be raised.
 
-Omitting the fields attribute will work as previously, but is deprecated and
-this attribute will be required from 1.8 (unless you define the form class in
-another way).
+Finally, we hook these new views into the URLconf:
 
+.. snippet::
+    :filename: urls.py
 
-Finally, we hook these new views into the URLconf::
-
-    # urls.py
-    from django.conf.urls import patterns, url
+    from django.conf.urls import url
     from myapp.views import AuthorCreate, AuthorUpdate, AuthorDelete
 
-    urlpatterns = patterns('',
+    urlpatterns = [
         # ...
-        url(r'author/add/$', AuthorCreate.as_view(), name='author_add'),
-        url(r'author/(?P<pk>\d+)/$', AuthorUpdate.as_view(), name='author_update'),
-        url(r'author/(?P<pk>\d+)/delete/$', AuthorDelete.as_view(), name='author_delete'),
-    )
+        url(r'author/add/$', AuthorCreate.as_view(), name='author-add'),
+        url(r'author/(?P<pk>[0-9]+)/$', AuthorUpdate.as_view(), name='author-update'),
+        url(r'author/(?P<pk>[0-9]+)/delete/$', AuthorDelete.as_view(), name='author-delete'),
+    ]
 
 .. note::
 
@@ -173,28 +180,32 @@ Finally, we hook these new views into the URLconf::
     :attr:`~django.views.generic.detail.SingleObjectTemplateResponseMixin.template_name_suffix`
     on your view class.
 
-Models and request.user
------------------------
+Models and ``request.user``
+===========================
 
 To track the user that created an object using a :class:`CreateView`,
 you can use a custom :class:`~django.forms.ModelForm` to do this. First, add
-the foreign key relation to the model::
+the foreign key relation to the model:
 
-    # models.py
-    from django.contrib.auth import User
+.. snippet::
+    :filename: models.py
+
+    from django.contrib.auth.models import User
     from django.db import models
 
     class Author(models.Model):
         name = models.CharField(max_length=200)
-        created_by = models.ForeignKey(User)
+        created_by = models.ForeignKey(User, on_delete=models.CASCADE)
 
         # ...
 
 In the view, ensure that you don't include ``created_by`` in the list of fields
 to edit, and override
-:meth:`~django.views.generic.edit.ModelFormMixin.form_valid()` to add the user::
+:meth:`~django.views.generic.edit.ModelFormMixin.form_valid()` to add the user:
 
-    # views.py
+.. snippet::
+    :filename: views.py
+
     from django.views.generic.edit import CreateView
     from myapp.models import Author
 
@@ -213,14 +224,12 @@ alternatively handle unauthorized users in the
 :meth:`~django.views.generic.edit.ModelFormMixin.form_valid()`.
 
 AJAX example
-------------
+============
 
 Here is a simple example showing how you might go about implementing a form that
 works for AJAX requests as well as 'normal' form POSTs::
 
-    import json
-
-    from django.http import HttpResponse
+    from django.http import JsonResponse
     from django.views.generic.edit import CreateView
     from myapp.models import Author
 
@@ -229,15 +238,10 @@ works for AJAX requests as well as 'normal' form POSTs::
         Mixin to add AJAX support to a form.
         Must be used with an object-based FormView (e.g. CreateView)
         """
-        def render_to_json_response(self, context, **response_kwargs):
-            data = json.dumps(context)
-            response_kwargs['content_type'] = 'application/json'
-            return HttpResponse(data, **response_kwargs)
-
         def form_invalid(self, form):
             response = super(AjaxableResponseMixin, self).form_invalid(form)
             if self.request.is_ajax():
-                return self.render_to_json_response(form.errors, status=400)
+                return JsonResponse(form.errors, status=400)
             else:
                 return response
 
@@ -250,7 +254,7 @@ works for AJAX requests as well as 'normal' form POSTs::
                 data = {
                     'pk': self.object.pk,
                 }
-                return self.render_to_json_response(data)
+                return JsonResponse(data)
             else:
                 return response
 

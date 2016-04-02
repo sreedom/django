@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 from django.db import connection
 from django.test import TestCase
 
-from .models import A01, A02, B01, B02, C01, C02, Unmanaged2, Managed1
+from .models import A01, A02, B01, B02, C01, C02, Managed1, Unmanaged2
 
 
 class SimpleTests(TestCase):
@@ -12,14 +12,14 @@ class SimpleTests(TestCase):
         """
         The main test here is that the all the models can be created without
         any database errors. We can also do some more simple insertion and
-        lookup tests whilst we're here to show that the second of models do
+        lookup tests while we're here to show that the second of models do
         refer to the tables from the first set.
         """
         # Insert some data into one set of models.
         a = A01.objects.create(f_a="foo", f_b=42)
         B01.objects.create(fk_a=a, f_a="fred", f_b=1729)
         c = C01.objects.create(f_a="barney", f_b=1)
-        c.mm_a = [a]
+        c.mm_a.set([a])
 
         # ... and pull it out via the other set.
         a2 = A02.objects.all()[0]
@@ -50,7 +50,7 @@ class ManyToManyUnmanagedTests(TestCase):
         """
         table = Unmanaged2._meta.get_field('mm').m2m_db_table()
         tables = connection.introspection.table_names()
-        self.assertTrue(table not in tables, "Table '%s' should not exist, but it does." % table)
+        self.assertNotIn(table, tables, "Table '%s' should not exist, but it does." % table)
 
     def test_many_to_many_between_unmanaged_and_managed(self):
         """
@@ -58,4 +58,4 @@ class ManyToManyUnmanagedTests(TestCase):
         """
         table = Managed1._meta.get_field('mm').m2m_db_table()
         tables = connection.introspection.table_names()
-        self.assertTrue(table in tables, "Table '%s' does not exist." % table)
+        self.assertIn(table, tables, "Table '%s' does not exist." % table)
